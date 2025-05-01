@@ -2,6 +2,7 @@
 import math
 from scipy.optimize import minimize
 import numpy as np
+import matplotlib.pyplot as plt
 
 C_MAX = [800, 600, 400] # 展馆最大瞬时容量/人
 T_OPEN = 8              # 开放时间/小时
@@ -93,55 +94,54 @@ def Solve():
 
     print(f'N_indoor: {N_indoor:.2f}人, N_outdoor: {N_outdoor:.2f}人, N_service: {N_service:.2f}人, N_escape: {N_escape:.2f}人')
 
-    N_upper = max(N_indoor, N_outdoor, N_service, N_escape)
+    N_upper = min(N_indoor, N_outdoor, N_service, N_escape)
 
-    def objective(N):
+    def objective(N_array):
+        N = N_array[0]  # 从数组中取出标量
+
         params = [
-            (1.25, -2.5, 0.8),   # f0
-            (1.67, -1.25, 0.6),  # f1
-            (1.43, -1.67, 0.7),  # f2
-            (2.00, -1.00, 0.5),  # f3
+            (0.8, 1.25, -2.5, 3),
+            (0.6, 1.67, -1.25, 1.75),
+            (0.7, 1.43, -1.67, 2.17),
+            (0.5, 2, -1, 1.5)
         ]
 
-        def N_func(N, k1, k2, x1):
-            return np.piecewise(
-                N,
-                [
-                    N <= x1, N > x1
-                ],
-                [
-                    lambda N: k1 * N,
-                    lambda N: k2 * N + (k1 - k2) * x1
-                ]
-            )
+        def N_func(N, p, k1, k2, b):
+            return np.piecewise(N,
+                                [
+                                    (N <= p),
+                                    (p < N)
+                                ],
+                                [
+                                    lambda N: k1 * N,
+                                    lambda N: k2 * N + b,
+                                ]
+                                )
 
         weights = [0.5, 0.25, 0.2, 0.05]
-        N_vals = [
-            N_indoor,
-            N_outdoor,
-            N_service,
-            N_escape
-        ]
+        N_vals = [N_indoor, N_outdoor, N_service, N_escape]
+
         value = 0
         for i in range(4):
-            value += N_func(N / N_vals[i], *params[i]) * weights[i]
-        return value
+            value += float(N_func(N / N_vals[i], *params[i])) * weights[i]
 
-    # 约束：N <= N_upper
-    constraints = (
-        { 'type': 'ineq', 'fun': lambda N: N_upper - N[0] }
-    )
+        return -value
 
-    # N >= 0 约束
+
+    # 约束，取空值
+    constraints = ()
+
+    # 0 <= N <= N_upper 约束
+    # 这个边界的优先级更高
     bounds = [
         (0, N_upper),
     ]
 
     # 初始猜测
-    x0 = [N_upper / 2]
+    x0 = [N_upper/2]
 
     # 求解
-    result = minimize(objective, x0, method='SLSQP', bounds=bounds, constraints=constraints)
+    result = minimize(objective, x0, method='Powell', bounds=bounds, constraints=constraints)
 
     # 输出结果
     if result.success:
@@ -149,6 +149,20 @@ def Solve():
         print(f"最优游客容量 N = {N_opt:.2f} 人/天")
     else:
         print("优化失败：", result.message)
+
+    def draw_objective():
+        N_test = np.linspace(0, 15000, 300)
+        obj_values = [objective([n]) for n in N_test]
+        plt.figure(figsize=(10, 6))
+        plt.plot(N_test, obj_values, label="Objective Function", color='blue')
+        plt.axvline(x=N_upper, color='red', linestyle='--', label=f'N_upper = {N_upper:.1f}')
+        plt.xlabel("N")
+        plt.ylabel("Objective")
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+    draw_objective()
 
 def main():
     Solve()
