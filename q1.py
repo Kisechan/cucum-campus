@@ -69,8 +69,6 @@ def Calc_lambda_max(mu, c):
 def Calc_N_service():
     N_service_list = [(Calc_lambda_max(mu, c) / p) for mu, c, p in zip(MU, C_SERVICE, P_SERVICE)]
 
-    print(f'N_service_list = {[f"{x:.1f}人" for x in N_service_list]}')
-
     weights = np.array(C_SERVICE) / sum(C_SERVICE)
 
     # 取三种服务点的加权平均返回
@@ -88,32 +86,59 @@ def Calc_t_escape():
     return t_escape
 
 def Solve():
-    # 权重
-    omega1 = 0.4
-    omega2 = 1 - omega1
-
+    N_outdoor = Calc_N_outdoor()
     N_indoor = Calc_N_indoor()
     N_service = Calc_N_service()
     N_escape = V * W * Calc_t_escape() / T_STAY_OUT
 
-    print(f'N_indoor: {N_indoor:.1f}人, N_service: {N_service:.1f}人, N_escape: {N_escape:.1f}人')
+    print(f'N_indoor: {N_indoor:.2f}人, N_outdoor: {N_outdoor:.2f}人, N_service: {N_service:.2f}人, N_escape: {N_escape:.2f}人')
 
-    N_upper = min(N_indoor, N_service, N_escape)
+    N_upper = max(N_indoor, N_outdoor, N_service, N_escape)
 
     def objective(N):
-        return omega1 * abs(N[0] / N_indoor - 1) + omega2 * abs(N[0] / N_service - 1)
+        params = [
+            (1.25, -2.5, 0.8),   # f0
+            (1.67, -1.25, 0.6),  # f1
+            (1.43, -1.67, 0.7),  # f2
+            (2.00, -1.00, 0.5),  # f3
+        ]
+
+        def N_func(N, k1, k2, x1):
+            return np.piecewise(
+                N,
+                [
+                    N <= x1, N > x1
+                ],
+                [
+                    lambda N: k1 * N,
+                    lambda N: k2 * N + (k1 - k2) * x1
+                ]
+            )
+
+        weights = [0.5, 0.25, 0.2, 0.05]
+        N_vals = [
+            N_indoor,
+            N_outdoor,
+            N_service,
+            N_escape
+        ]
+        value = 0
+        for i in range(4):
+            value += N_func(N / N_vals[i], *params[i]) * weights[i]
+        return value
 
     # 约束：N <= N_upper
-    constraints = ({
-        'type': 'ineq',
-        'fun': lambda N: N_upper - N[0]  # N <= N_upper
-    })
+    constraints = (
+        { 'type': 'ineq', 'fun': lambda N: N_upper - N[0] }
+    )
 
     # N >= 0 约束
-    bounds = [(0, N_upper)]
+    bounds = [
+        (0, N_upper),
+    ]
 
     # 初始猜测
-    x0 = [min(N_indoor, N_service)]
+    x0 = [N_upper / 2]
 
     # 求解
     result = minimize(objective, x0, method='SLSQP', bounds=bounds, constraints=constraints)
@@ -122,7 +147,6 @@ def Solve():
     if result.success:
         N_opt = result.x[0]
         print(f"最优游客容量 N = {N_opt:.2f} 人/天")
-        print(f"相对误差: 室内偏差={(N_opt/N_indoor - 1):.4f}, 商服偏差={(N_opt/N_service - 1):.4f}")
     else:
         print("优化失败：", result.message)
 
