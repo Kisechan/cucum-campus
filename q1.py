@@ -33,23 +33,37 @@ def Calc_lambda_max(mu, c):
     def Calc_Wq(lmbd):
         rho = lmbd / (c * mu)
         if rho >= 1 or rho <= 0:
-            return float('inf')
-            # 系统不稳定或数据出错
-        Wq = ((lmbd / mu) ** c) / (math.factorial(c) * ((1 - rho) ** 3) * c * mu)
+            return float('inf')  # 系统不稳定
+
+        # 计算 P0
+        sum_p0 = 0
+        for k in range(c):
+            term = (lmbd/mu)**k / math.factorial(k)
+            sum_p0 += term
+
+        # 最后一项的分母 (1 - rho) 避免除以零
+        last_term = (lmbd/mu)**c / (math.factorial(c) * (1 - rho))
+        P0 = 1 / (sum_p0 + last_term)
+
+        # 计算 Wq
+        Wq = ( (lmbd/mu)**c ) / (math.factorial(c) * (1 - rho)**2 ) * P0 / (c * mu)
         return Wq
 
-    # 二分法求解λ_max
+    # 二分法搜索满足 Wq ≤ Wq_LIMIT 的最大 lambda
     tolerance = 1e-6
-    l, r = 0.0, c * mu - tolerance
-    lmbd = 0.0
-    while r - l > tolerance:
-        mid = l + (r - l) / 2
-        if Calc_Wq(mid) <= Wq_LIMIT:
-            l = mid
-            lmbd = mid
+    left, right = 0, c * mu - tolerance  # 确保 rho < 1
+    best_lambda = 0
+
+    while right - left > tolerance:
+        mid = (left + right) / 2
+        current_Wq = Calc_Wq(mid)
+        if current_Wq <= Wq_LIMIT:
+            best_lambda = mid
+            left = mid
         else:
-            r = mid
-    return lmbd
+            right = mid
+
+    return best_lambda
 
 # 日服务能力
 def Calc_N_service():
@@ -75,7 +89,7 @@ def Calc_t_escape():
 
 def Solve():
     # 权重
-    omega1 = 0.1
+    omega1 = 0.4
     omega2 = 1 - omega1
 
     N_indoor = Calc_N_indoor()
