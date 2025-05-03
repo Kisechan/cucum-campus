@@ -1,6 +1,11 @@
 import networkx as nx
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpInteger, value
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+# 中文显示支持
+rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'Microsoft YaHei']
+rcParams['axes.unicode_minus'] = False
+
 # 创建图
 G = nx.Graph()
 
@@ -149,3 +154,58 @@ for edge, alloc in results['edges'].items():
     sum_num += alloc['guide'] + alloc['emergency']
 
 print(f"\n志愿者总数: {sum_num:.1f} 人")
+
+def draw_plot():
+    # 创建可视化图形
+    plt.figure(figsize=(14, 10))
+    pos = nx.spring_layout(G, seed=42, k=0.15)  # 设置节点布局
+
+    # 1. 绘制节点和边的基础图
+    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1.5)
+
+    # 2. 绘制节点（按志愿者总数设置大小和颜色）
+    node_sizes = [100 + 350*(results['nodes'][n]['guide'] + results['nodes'][n]['consult'] + results['nodes'][n]['emergency'])
+                  for n in G.nodes()]
+    node_colors = [results['nodes'][n]['emergency'] for n in G.nodes()]  # 用应急志愿者数量作为颜色指标
+
+    nodes = nx.draw_networkx_nodes(
+        G, pos, node_size=node_sizes,
+        node_color=node_colors,
+        cmap='YlOrRd', alpha=0.8
+    )
+
+    # 3. 添加节点标签（显示三类志愿者数量）
+    node_labels = {
+        n: f"{n}\nG:{results['nodes'][n]['guide']} C:{results['nodes'][n]['consult']} E:{results['nodes'][n]['emergency']}"
+        for n in G.nodes()
+    }
+    nx.draw_networkx_labels(
+        G, pos, labels=node_labels,
+        font_size=8, font_color='black',
+        bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.3')
+    )
+
+    # 4. 添加边标签（显示两类志愿者数量）
+    edge_labels = {
+        e: f"G:{results['edges'][e]['guide']} E:{results['edges'][e]['emergency']}"
+        for e in G.edges()
+    }
+    nx.draw_networkx_edge_labels(
+        G, pos, edge_labels=edge_labels,
+        font_size=7, font_color='blue',
+        bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
+    )
+
+    # 5. 添加图例和颜色条
+    plt.colorbar(nodes, label='应急志愿者数量', shrink=0.8)
+    plt.title("净月潭国家森林公园志愿者分配方案\n(节点大小表示总志愿者需求，颜色表示应急志愿者数量)", fontsize=12)
+
+    # 6. 添加说明文本
+    plt.figtext(0.5, 0.05,
+                "G:引导志愿者数量  C:咨询志愿者数量  E:应急志愿者数量",
+                ha="center", fontsize=10, bbox={"facecolor":"orange", "alpha":0.2, "pad":5})
+
+    plt.axis('off')
+    plt.tight_layout()
+    plt.savefig('assets/jingyuetan_volunteers.svg', format='svg', bbox_inches='tight')
+    plt.close()
